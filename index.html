@@ -499,30 +499,31 @@
         //     }
         // });
         // Hàm xử lý chung cho cả Space và Chạm màn hình
+        // Hàm xử lý hành động chung: Nhảy hoặc Bắt đầu/Chơi lại
 function handleGameInput(evt) {
-    // Ngăn trình duyệt cuộn trang hoặc zoom khi nhấn
+    // Ngăn chặn cuộn trang hoặc zoom mặc định của trình duyệt
     if (evt) evt.preventDefault(); 
 
     if (!isGameStarted || isGameOver) {
-        // Nếu game chưa bắt đầu hoặc đã thua, gọi hàm click nút Start/Restart
+        // Nếu game chưa bắt đầu hoặc đã thua -> Click nút Bắt đầu/Chơi lại
         actionBtn.click();
     } else {
-        // Nếu đang chơi thì cho chim vỗ cánh
+        // Nếu đang trong trận -> Cho chim bay lên
         bird.flap();
     }
 }
 
-// 1. Dành cho PC (Phím Space)
+// 1. Lắng nghe phím Space trên bàn phím
 document.addEventListener("keydown", function(evt) {
-    if(evt.code === "Space") {
+    if (evt.code === "Space") {
         handleGameInput(evt);
     }
 });
 
-// 2. Dành cho Điện thoại (Chạm màn hình)
+// 2. Lắng nghe chạm trên màn hình cảm ứng
 canvas.addEventListener("touchstart", function(evt) {
     handleGameInput(evt);
-}, { passive: false }); // Cần 'passive: false' để preventDefault hoạt động
+}, { passive: false });
         function loop() {
             if (!isGameStarted) return;
             
