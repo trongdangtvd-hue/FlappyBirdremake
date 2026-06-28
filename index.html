@@ -498,6 +498,18 @@
                 else { bird.flap(); }
             }
         });
+        // Thêm sự kiện chạm màn hình cho điện thoại
+canvas.addEventListener("touchstart", function(evt) {
+    evt.preventDefault(); // Ngăn trình duyệt cuộn trang hoặc zoom khi chạm
+    
+    if (!isGameStarted || isGameOver) {
+        // Nếu game chưa bắt đầu hoặc đã thua, gọi hàm click nút Start/Restart
+        actionBtn.click();
+    } else {
+        // Nếu đang chơi thì cho chim vỗ cánh
+        bird.flap();
+    }
+}, {passive: false}); // passive: false là bắt buộc để dùng preventDefault()
 
         function loop() {
             if (!isGameStarted) return;
