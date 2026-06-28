@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Bird - Multi-language</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #70c5ce;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        .game-container {
+            position: relative;
+            width: 400px;
+            height: 500px;
+        }
+
+        canvas {
+            background-color: #87CEEB; 
+            transition: background-color 3s ease-in-out;
+            border: 2px solid #333;
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.3);
+            width: 100%;
+            height: 100%;
+        }
+
+        #actionBtn {
+            position: absolute;
+            top: 75%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 15px 30px;
+            font-size: 22px;
+            font-weight: bold;
+            background-color: #ff9800;
+            color: white;
+            border: 2px solid #fff;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+            transition: 0.2s;
+        }
+
+        #actionBtn:hover {
+            background-color: #e68a00;
+            transform: translate(-50%, -48%);
+        }
+
+        /* Khung chọn ngôn ngữ ở ngoài góc phải màn hình */
+        .lang-switch {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+        }
+
+        .lang-switch button {
+            background-color: #333;
+            color: #fff;
+            border: 2px solid #fff;
+            padding: 5px 10px;
+            margin-left: 5px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+
+        .lang-switch button:hover {
+            background-color: #555;
+        }
+
+        /* Trạng thái nút đang được chọn */
+        .lang-switch button.active {
+            background-color: #ff9800;
+            border-color: #ffdf00;
+        }
+        
+    </style>
+</head>
+<body>
+    
+    <!-- Nút chuyển ngôn ngữ -->
+    <div class="lang-switch">
+        <button id="btnVi">VI</button>
+        <button id="btnEn">EN</button>
+    </div>
+
+    <div class="game-container">
+        <canvas id="gameCanvas" width="400" height="500"></canvas>
+        <button id="actionBtn">Bắt Đầu Chơi</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const actionBtn = document.getElementById('actionBtn');
+
+        let frames = 0;
+        let isGameOver = false;
+        let isGameStarted = false;
+        let currentNightAlpha = 0; 
+
+        // --- BỘ TỪ ĐIỂN ĐA NGÔN NGỮ (I18N) ---
+        const i18n = {
+            vi: {
+                start: "Bắt Đầu Chơi",
+                restart: "Chơi Lại",
+                best: "Kỷ lục: ",
+                totalCoins: "💰 Tổng xu: ",
+                gameOver: "Game Over",
+                score: "Điểm của bạn: ",
+                sessionCoins: "Ván này kiếm được: +",
+                bank: "Ngân hàng: ",
+                bestScore: "Kỷ lục cao nhất: ",
+                coinUnit: " xu"
+            },
+            en: {
+                start: "Start Game",
+                restart: "Play Again",
+                best: "Best: ",
+                totalCoins: "💰 Total: ",
+                gameOver: "Game Over",
+                score: "Your Score: ",
+                sessionCoins: "Session Coins: +",
+                bank: "Bank: ",
+                bestScore: "Best Score: ",
+                coinUnit: " coins"
+            }
+        };
+
+        // Lấy ngôn ngữ đã lưu hoặc mặc định là Tiếng Việt
+        let currentLang = localStorage.getItem('gameLang') || 'vi';
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('gameLang', lang);
+
+            // Đổi màu nút để biết đang chọn ngôn ngữ nào
+            document.getElementById('btnVi').classList.toggle('active', lang === 'vi');
+            document.getElementById('btnEn').classList.toggle('active', lang === 'en');
+
+            // Cập nhật text của nút chính
+            if (actionBtn.style.display !== "none") {
+                actionBtn.innerText = isGameOver ? i18n[currentLang].restart : i18n[currentLang].start;
+            }
+
+            // Nếu đang ở màn hình chờ (chưa loop), gọi hàm vẽ lại để cập nhật chữ
+            if (!isGameStarted && !isGameOver) {
+                drawInitScreen();
+            }
+        }
+
+        // Bắt sự kiện click nút ngôn ngữ (dùng blur để không bị dính phím Space khi bấm)
+        document.getElementById('btnVi').addEventListener('click', function() { setLanguage('vi'); this.blur(); });
+        document.getElementById('btnEn').addEventListener('click', function() { setLanguage('en'); this.blur(); });
+
+        // --- HỆ THỐNG SAO TRỜI ---
+        const stars = {
+            list: [],
+            init() {
+                for(let i = 0; i < 50; i++) {
+                    this.list.push({
+                        x: Math.random() * canvas.width,
+                        y: Math.random() * (canvas.height - 150),
+                        r: Math.random() * 1.5 + 0.5
+                    });
+                }
+            },
+            draw() {
+                if (currentNightAlpha < 0.01) return; 
+                ctx.fillStyle = "white";
+                for(let i = 0; i < this.list.length; i++) {
+                    let blink = Math.random() > 0.9 ? 0.3 : 1;
+                    ctx.globalAlpha = blink * currentNightAlpha; 
+                    ctx.beginPath();
+                    ctx.arc(this.list[i].x, this.list[i].y, this.list[i].r, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1; 
+            }
+        };
+        stars.init();
+
+        // --- HỆ THỐNG MÂY BAY ---
+        const clouds = {
+            list: [], dx: 0.5, 
+            init() {
+                this.list.push({x: 50, y: 80, scale: 1});
+                this.list.push({x: 200, y: 40, scale: 0.7});
+                this.list.push({x: 350, y: 100, scale: 1.2});
+            },
+            draw() {
+                let r = 255 - 75 * currentNightAlpha, g = 255 - 75 * currentNightAlpha, b = 255 - 55 * currentNightAlpha; 
+                let a = 0.8 - 0.4 * currentNightAlpha; 
+                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
+                for (let i = 0; i < this.list.length; i++) {
+                    let c = this.list[i];
+                    ctx.beginPath();
+                    ctx.arc(c.x, c.y, 20 * c.scale, 0, Math.PI * 2);
+                    ctx.arc(c.x + 20 * c.scale, c.y - 10 * c.scale, 25 * c.scale, 0, Math.PI * 2);
+                    ctx.arc(c.x + 45 * c.scale, c.y, 20 * c.scale, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            },
+            update() {
+                if (frames % 180 === 0) {
+                    this.list.push({ x: canvas.width + 50, y: Math.random() * 120 + 30, scale: Math.random() * 0.6 + 0.6 });
+                }
+                for (let i = 0; i < this.list.length; i++) {
+                    let c = this.list[i];
+                    c.x -= this.dx; 
+                    if (c.x + 80 * c.scale < 0) { this.list.shift(); i--; }
+                }
+            }
+        };
+        clouds.init(); 
+
+        // --- HỆ THỐNG PHÁO HOA ---
+        let particles = [];
+        const colors = ['#ff4b4b', '#ffb74b', '#ffff4b', '#4bff4b', '#4b4bff', '#d24bff', '#ffffff'];
+
+        function createFirework(x, y) {
+            for (let i = 0; i < 40; i++) {
+                particles.push({
+                    x: x, y: y, vx: (Math.random() - 0.5) * 8, vy: (Math.random() - 0.5) * 8, 
+                    alpha: 1, color: colors[Math.floor(Math.random() * colors.length)]
+                });
+            }
+        }
+
+        function updateAndDrawFireworks(isRandomSpawning) {
+            if (isRandomSpawning && frames % 40 === 0) {
+                createFirework(Math.random() * (canvas.width - 100) + 50, Math.random() * (canvas.height / 2) + 20);
+            }
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.vx *= 0.95; p.vy *= 0.95; p.vy += 0.05; 
+                p.x += p.vx; p.y += p.vy; p.alpha -= 0.015; 
+                if (p.alpha <= 0) { particles.splice(i, 1); } 
+                else {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill();
+                }
+            }
+            ctx.globalAlpha = 1; 
+        }
+
+        // --- ĐỐI TƯỢNG CHIM ---
+        const bird = {
+            x: 50, y: 220, width: 30, height: 30, gravity: 0.15, velocity: 0, jump: -4,      
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+                let rotation = Math.min(Math.PI / 4, Math.max(-Math.PI / 4, (this.velocity * 0.1)));
+                ctx.rotate(rotation);
+
+                ctx.lineWidth = 2; ctx.strokeStyle = "#000";
+
+                ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2);
+                ctx.fillStyle = "#FFD700"; ctx.fill(); ctx.stroke();
+
+                ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(24, 4); ctx.lineTo(10, 8);  
+                ctx.fillStyle = "#ff7f00"; ctx.fill(); ctx.stroke();
+
+                ctx.beginPath(); ctx.arc(6, -6, 5, 0, Math.PI * 2);
+                ctx.fillStyle = "white"; ctx.fill(); ctx.stroke();
+
+                ctx.beginPath(); ctx.arc(8, -6, 2, 0, Math.PI * 2);
+                ctx.fillStyle = "black"; ctx.fill();
+
+                let isFlappingDown = frames % 20 < 10 && this.velocity < 3;
+                ctx.beginPath();
+                if (isFlappingDown) { ctx.ellipse(-4, 4, 8, 5, Math.PI / 6, 0, Math.PI * 2); } 
+                else { ctx.ellipse(-4, 0, 8, 5, -Math.PI / 6, 0, Math.PI * 2); }
+                ctx.fillStyle = "white"; ctx.fill(); ctx.stroke();
+
+                ctx.restore();
+            },
+            
+            update() {
+                this.velocity += this.gravity;
+                this.y += this.velocity;
+                if (this.y + this.height >= canvas.height) { this.y = canvas.height - this.height; gameOver(); }
+                if (this.y <= 0) { this.y = 0; this.velocity = 0; }
+            },
+            flap() { this.velocity = this.jump; }
+        };
+
+        // --- ĐỐI TƯỢNG ỐNG NƯỚC & VẬT PHẨM ---
+        const pipes = {
+            position: [], width: 50, gap: 150, dx: 1.2, 
+            
+            draw() {
+                for (let i = 0; i < this.position.length; i++) {
+                    let p = this.position[i];
+                    
+                    ctx.fillStyle = "#73BF2E"; 
+                    ctx.fillRect(p.x, 0, this.width, p.y);
+                    ctx.fillRect(p.x, p.y + this.gap, this.width, canvas.height - (p.y + this.gap));
+
+                    ctx.lineWidth = 2; ctx.fillStyle = "#558C22"; 
+                    ctx.fillRect(p.x - 2, p.y - 20, this.width + 4, 20);
+                    ctx.strokeRect(p.x - 2, p.y - 20, this.width + 4, 20);
+
+                    ctx.fillRect(p.x - 2, p.y + this.gap, this.width + 4, 20);
+                    ctx.strokeRect(p.x - 2, p.y + this.gap, this.width + 4, 20);
+                    
+                    ctx.strokeRect(p.x, 0, this.width, p.y);
+                    ctx.strokeRect(p.x, p.y + this.gap, this.width, canvas.height - (p.y + this.gap));
+
+                    let it = p.item;
+                    if (it && !it.collected) {
+                        ctx.save(); 
+                        if (it.type === 'coin') {
+                            let glowIntensity = 10 + 8 * Math.sin(frames * 0.1);
+                            ctx.shadowBlur = glowIntensity;
+                            ctx.shadowColor = "#FFDF00"; 
+                            
+                            ctx.beginPath(); ctx.arc(it.x, it.y, 12, 0, Math.PI * 2);
+                            ctx.fillStyle = "#FFDF00"; ctx.fill();
+                            ctx.lineWidth = 2; ctx.strokeStyle = "#DAA520"; ctx.stroke();
+
+                            ctx.shadowBlur = 0; ctx.fillStyle = "#DAA520";
+                            ctx.font = "bold 16px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                            ctx.fillText("$", it.x, it.y + 1);
+
+                        } else if (it.type === 'diamond') {
+                            let glowIntensity = 15 + 10 * Math.sin(frames * 0.15); 
+                            ctx.shadowBlur = glowIntensity; ctx.shadowColor = "#00FFFF"; 
+                            
+                            ctx.beginPath();
+                            ctx.moveTo(it.x - 8, it.y - 10); ctx.lineTo(it.x + 8, it.y - 10); 
+                            ctx.lineTo(it.x + 14, it.y - 2); ctx.lineTo(it.x, it.y + 14);     
+                            ctx.lineTo(it.x - 14, it.y - 2); ctx.closePath();
+                            
+                            let grad = ctx.createLinearGradient(it.x, it.y - 10, it.x, it.y + 14);
+                            grad.addColorStop(0, "#E0FFFF"); grad.addColorStop(0.4, "#00FFFF"); grad.addColorStop(1, "#008B8B"); 
+                            
+                            ctx.fillStyle = grad; ctx.fill();
+                            ctx.lineWidth = 1.5; ctx.strokeStyle = "#FFFFFF"; ctx.stroke();
+
+                            ctx.shadowBlur = 0;
+                            ctx.beginPath();
+                            ctx.moveTo(it.x - 14, it.y - 2); ctx.lineTo(it.x + 14, it.y - 2);
+                            ctx.moveTo(it.x - 8, it.y - 10); ctx.lineTo(it.x - 4, it.y - 2);
+                            ctx.moveTo(it.x + 8, it.y - 10); ctx.lineTo(it.x + 4, it.y - 2);
+                            ctx.moveTo(it.x - 4, it.y - 2); ctx.lineTo(it.x, it.y + 14);
+                            ctx.moveTo(it.x + 4, it.y - 2); ctx.lineTo(it.x, it.y + 14);
+                            ctx.moveTo(it.x, it.y - 10); ctx.lineTo(it.x, it.y - 2);
+                            ctx.strokeStyle = "rgba(255, 255, 255, 0.8)"; ctx.stroke();
+
+                            let sparkleScale = Math.max(0, Math.sin(frames * 0.15)); 
+                            if (sparkleScale > 0) {
+                                ctx.save();
+                                ctx.translate(it.x - 6, it.y - 8); 
+                                ctx.scale(sparkleScale, sparkleScale); 
+                                ctx.beginPath();
+                                ctx.moveTo(0, -8); ctx.quadraticCurveTo(0, 0, 8, 0); ctx.quadraticCurveTo(0, 0, 0, 8);
+                                ctx.quadraticCurveTo(0, 0, -8, 0); ctx.quadraticCurveTo(0, 0, 0, -8);
+                                ctx.fillStyle = "#FFFFFF"; ctx.fill();
+                                ctx.restore();
+                            }
+                        }
+                        ctx.restore(); 
+                    }
+                }
+            },
+            
+            update() {
+                if (frames % 220 === 0) {
+                    let pipeY = Math.random() * 150 + 100;
+                    let randSpawn = Math.random();
+                    let spawnedItem = null;
+
+                    if (randSpawn < 0.10) {
+                        spawnedItem = { type: 'diamond', x: canvas.width + this.width / 2, y: pipeY + 30 + Math.random() * (this.gap - 60), collected: false };
+                    } else if (randSpawn < 0.40) {
+                        spawnedItem = { type: 'coin', x: canvas.width + this.width / 2, y: pipeY + 30 + Math.random() * (this.gap - 60), collected: false };
+                    }
+                    this.position.push({ x: canvas.width, y: pipeY, item: spawnedItem });
+                }
+
+                for (let i = 0; i < this.position.length; i++) {
+                    let p = this.position[i];
+                    p.x -= this.dx;
+
+                    if (p.item && !p.item.collected) {
+                        p.item.x -= this.dx; 
+                        let cx = p.item.x; let cy = p.item.y; let cr = 14; 
+
+                        if (bird.x + bird.width > cx - cr && bird.x < cx + cr && bird.y + bird.height > cy - cr && bird.y < cy + cr) {
+                            p.item.collected = true; 
+                            let reward = (p.item.type === 'diamond') ? 5 : 1;
+                            score.sessionCoins += reward; 
+                            score.totalCoins += reward;   
+                            localStorage.setItem("totalCoins", score.totalCoins); 
+                        }
+                    }
+
+                    if (bird.x + bird.width - 4 > p.x && bird.x + 4 < p.x + this.width && (bird.y + 4 < p.y || bird.y + bird.height - 4 > p.y + this.gap)) {
+                        gameOver();
+                    }
+
+                    if (p.x + this.width <= 0) {
+                        this.position.shift();
+                        score.value += 1;
+                        if (score.value > 0 && score.value % 10 === 0) {
+                            createFirework(canvas.width / 2, canvas.height / 3);
+                            createFirework(canvas.width / 2 - 80, canvas.height / 3 + 30);
+                            createFirework(canvas.width / 2 + 80, canvas.height / 3 + 30);
+                        }
+                        if (score.value > score.best) {
+                            score.best = score.value; localStorage.setItem("bestScore", score.best);
+                        }
+                        i--;
+                    }
+                }
+            }
+        };
+
+        // --- ĐỐI TƯỢNG QUẢN LÝ ĐIỂM & XU ---
+        const score = {
+            value: 0, best: parseInt(localStorage.getItem("bestScore")) || 0,
+            sessionCoins: 0, totalCoins: parseInt(localStorage.getItem("totalCoins")) || 0, 
+            
+            draw() {
+                let fillR = 255, fillG = 255 - 32 * currentNightAlpha, fillB = 255 - 255 * currentNightAlpha; 
+                let strokeRGB = 255 * currentNightAlpha; 
+
+                ctx.fillStyle = `rgb(${fillR}, ${fillG}, ${fillB})`; 
+                ctx.strokeStyle = `rgb(${strokeRGB}, ${strokeRGB}, ${strokeRGB})`; 
+                ctx.lineWidth = 2;
+                
+                // Vẽ điểm số
+                ctx.font = "35px Arial";
+                ctx.fillText(this.value, canvas.width / 2 - 10, 50);
+                ctx.strokeText(this.value, canvas.width / 2 - 10, 50);
+                
+                // Vẽ Kỷ lục (lấy chữ từ i18n)
+                ctx.font = "18px Arial"; 
+                ctx.textAlign = "right"; 
+                ctx.fillText(i18n[currentLang].best + this.best, canvas.width - 15, 30);
+                ctx.strokeText(i18n[currentLang].best + this.best, canvas.width - 15, 30);
+
+                // Vẽ Tổng xu (Ngân hàng) ở góc trái (lấy chữ từ i18n)
+                ctx.textAlign = "left"; 
+                ctx.fillStyle = "#FFDF00"; ctx.strokeStyle = "#000"; 
+                ctx.fillText(i18n[currentLang].totalCoins + this.totalCoins, 15, 30);
+                ctx.strokeText(i18n[currentLang].totalCoins + this.totalCoins, 15, 30);
+            }
+        };
+
+        function gameOver() {
+            if (isGameOver) return; 
+            isGameOver = true;
+            if (score.value > score.best) {
+                score.best = score.value;
+                localStorage.setItem("bestScore", score.best);
+            }
+            actionBtn.innerText = i18n[currentLang].restart; // Cập nhật ngôn ngữ nút
+            actionBtn.style.display = "block";
+            createFirework(canvas.width / 2, canvas.height / 3);
+            createFirework(canvas.width / 2 - 60, canvas.height / 3 + 30);
+            createFirework(canvas.width / 2 + 60, canvas.height / 3 + 30);
+        }
+
+        function reset() {
+            bird.y = 220; bird.velocity = 0; pipes.position = [];
+            score.value = 0; score.sessionCoins = 0; 
+            isGameOver = false; frames = 0; particles = []; 
+            currentNightAlpha = 0; 
+            canvas.style.backgroundColor = "#87CEEB";
+        }
+
+        actionBtn.addEventListener("click", function() {
+            actionBtn.style.display = "none";
+            if (!isGameStarted) {
+                isGameStarted = true; bird.flap(); loop(); 
+            } else if (isGameOver) {
+                reset(); bird.flap();
+            }
+        });
+
+        document.addEventListener("keydown", function(evt) {
+            if(evt.code === "Space") {
+                evt.preventDefault();
+                if (!isGameStarted || isGameOver) { actionBtn.click(); } 
+                else { bird.flap(); }
+            }
+        });
+
+        function loop() {
+            if (!isGameStarted) return;
+            
+            let currentLevel = Math.floor(score.value / 10);
+            let targetNightAlpha = (currentLevel % 2 !== 0) ? 1 : 0;
+            currentNightAlpha += (targetNightAlpha - currentNightAlpha) * 0.01;
+            canvas.style.backgroundColor = (targetNightAlpha === 1) ? "#0a182e" : "#87CEEB";
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (!isGameOver) { clouds.update(); bird.update(); pipes.update(); }
+            
+            stars.draw(); clouds.draw(); pipes.draw(); bird.draw();
+            
+            if (!isGameOver) {
+                updateAndDrawFireworks(false); 
+                score.draw();
+            } else {
+                ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                updateAndDrawFireworks(true); 
+
+                // --- BẢNG ĐIỂM DÙNG NGÔN NGỮ (I18N) ---
+                ctx.textAlign = "center";
+                ctx.fillStyle = "white"; ctx.font = "bold 40px Arial";
+                ctx.fillText(i18n[currentLang].gameOver, canvas.width / 2, 130);
+
+                ctx.fillStyle = "#ffdf00"; ctx.font = "bold 28px Arial";
+                ctx.fillText(i18n[currentLang].score + score.value, canvas.width / 2, 180);
+
+                ctx.fillStyle = "#00FFFF"; ctx.font = "bold 22px Arial";
+                ctx.fillText(i18n[currentLang].sessionCoins + score.sessionCoins + i18n[currentLang].coinUnit, canvas.width / 2, 220);
+                
+                ctx.fillStyle = "#FFDF00"; ctx.font = "bold 22px Arial";
+                ctx.fillText(i18n[currentLang].bank + score.totalCoins + i18n[currentLang].coinUnit, canvas.width / 2, 250);
+
+                ctx.fillStyle = "#d3d3d3"; ctx.font = "20px Arial";
+                ctx.fillText(i18n[currentLang].bestScore + score.best, canvas.width / 2, 300);
+                ctx.textAlign = "left"; 
+            }
+            
+            frames++;
+            requestAnimationFrame(loop); 
+        }
+
+        function drawInitScreen() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            clouds.draw(); 
+            bird.draw();
+            score.draw();
+        }
+
+        // Khởi động cài đặt ngôn ngữ ban đầu
+        setLanguage(currentLang);
+    </script>
+</body>
+</html>
