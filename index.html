@@ -502,7 +502,7 @@
         function loop() {
             if (!isGameStarted) return;
             
-            let currentLevel = Math.floor(score.value / 10);
+            let currentLevel = Math.floor(score.value / 25);
             let targetNightAlpha = (currentLevel % 2 !== 0) ? 1 : 0;
             currentNightAlpha += (targetNightAlpha - currentNightAlpha) * 0.01;
             canvas.style.backgroundColor = (targetNightAlpha === 1) ? "#0a182e" : "#87CEEB";
